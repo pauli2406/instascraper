@@ -40,7 +40,6 @@ class InstaCrawler
             $jsonData = substr($jsonData, 0, -1);
             //Return decoded data as JSON Array
             $this->setCrawledData(json_decode($jsonData));
-            dump($this->getCrawledData());
             $this->setIsPrivate(filter_var(
                 $this->getCrawledData()->entry_data->ProfilePage[0]->graphql->user->is_private,
                 FILTER_VALIDATE_BOOLEAN
@@ -148,7 +147,10 @@ class InstaCrawler
                     }
                     $this->setPostDetails($postDetails);
                 });
-
+                $location = '';
+                if (isset($this->getPostDetailsJson()->location)) {
+                    $location = $this->getPostDetailsJson()->location->name;
+                }
                 $post = new Post(
                     $postData->node->edge_media_to_caption->edges[0]->node->text,
                     $postData->node->edge_media_to_comment->count,
@@ -159,7 +161,7 @@ class InstaCrawler
                     $this->getPostDetailsJson()->is_ad,
                     $this->getPostDetailsJson()->has_ranked_comments,
                     $this->getPostDetailsJson()->caption_is_edited,
-                    $this->getPostDetailsJson()->location->name
+                    $location
                 );
                 array_push($posts, $post);
             }
