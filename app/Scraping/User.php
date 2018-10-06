@@ -154,7 +154,7 @@ class User
     /**
      * @return mixed
      */
-    public function getisPrivate()
+    public function isPrivate()
     {
         return $this->isPrivate;
     }
@@ -162,7 +162,7 @@ class User
     /**
      * @return mixed
      */
-    public function getisVerified()
+    public function isVerified()
     {
         return $this->isVerified;
     }

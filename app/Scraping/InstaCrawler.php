@@ -18,6 +18,8 @@ class InstaCrawler
     private $posts;
     private $isPrivate;
     private $isBusiness;
+    private $postDetailsJson;
+    private $postDetails;
 
     /**
      * Crawler constructor.
@@ -38,7 +40,7 @@ class InstaCrawler
             $jsonData = substr($jsonData, 0, -1);
             //Return decoded data as JSON Array
             $this->setCrawledData(json_decode($jsonData));
-
+            dump($this->getCrawledData());
             $this->setIsPrivate(filter_var(
                 $this->getCrawledData()->entry_data->ProfilePage[0]->graphql->user->is_private,
                 FILTER_VALIDATE_BOOLEAN
@@ -52,7 +54,7 @@ class InstaCrawler
 
     function filterBusinessAddress()
     {
-        if (!$this->getisPrivate() and $this->getisBusiness()) {
+        if (!$this->isPrivate() and $this->isBusiness()) {
             $businessAddressData = json_decode($this->getCrawledData()->entry_data->ProfilePage[0]->graphql->user->business_address_json);
             $businessAddress = new Address(
                 $businessAddressData->street_address,
@@ -90,18 +92,74 @@ class InstaCrawler
 
     function filterPosts()
     {
-        if (!$this->getisPrivate()) {
-            $postDataArray = $this->getCrawledData()->entry_data->ProfilePage[0]->graphql->user->edge_owner_to_timeline_media->edges;
+        if (!$this->isPrivate()) {
             $posts = array();
-            foreach ($postDataArray as $data) {
+            $postsDataArray = $this->getCrawledData()->entry_data->ProfilePage[0]->graphql->user->edge_owner_to_timeline_media->edges;
+            //Das iterieren durch die 12 gefunden Posts um mehr Details zu erhalten
+            foreach ($postsDataArray as $postData) {
+                //Anhand diesen Shortcode, kommt man auf die direkte Seite des Posts.
+                $imageShortcode = $postData->node->shortcode;
+                //Daten abrufen und das JSON erneut auswerten.
+                $postCrawler = (new Goutte)->request('GET', 'https://www.instagram.com/p/' . $imageShortcode . '/');
+                $postCrawler->filter('body > script:first-of-type')->each(function (Crawler $node) {
+                    $postDetailsJson = $node->text();
+                    //Remove "window._sharedData =" in front of the JSON String
+                    $postDetailsJson = substr($postDetailsJson, 21);
+                    //Remove the ; at the end, otherwise it is no correct JSON
+                    $postDetailsJson = substr($postDetailsJson, 0, -1);
+                    $postDetailsJson = json_decode($postDetailsJson);
+                    $this->setPostDetailsJson($postDetailsJson->entry_data->PostPage[0]->graphql->shortcode_media);
+
+                    $postDetails = array();
+                    //Wenn es eine Diashow mit mehren Bildern ist. Dann werden die Daten aus dem Array
+                    //edge_sidecar_to_children ausgelesen. Ansonsten direkt aus der Node
+                    if (isset($this->getPostDetailsJson()->edge_sidecar_to_children)) {
+                        foreach ($this->getPostDetailsJson()->edge_sidecar_to_children->edges as $edge) {
+                            $postDetail = new PostDetails(
+                                filter_var(
+                                    $edge->node->is_video,
+                                    FILTER_VALIDATE_BOOLEAN
+                                ),
+                                $edge->node->display_url,
+                                $edge->node->shortcode
+                            );
+                            if ($postDetail->isVideo()) {
+                                $postDetail->setVideoUrl($edge->node->video_url);
+                                $postDetail->setVideoDuration($edge->node->video_duration);
+                                $postDetail->setVideoViewCount($edge->node->video_view_count);
+                            }
+                            array_push($postDetails, $postDetail);
+                        }
+                    } else {
+                        $postDetail = new PostDetails(
+                            filter_var(
+                                $this->getPostDetailsJson()->is_video,
+                                FILTER_VALIDATE_BOOLEAN
+                            ),
+                            $this->getPostDetailsJson()->display_url,
+                            $this->getPostDetailsJson()->shortcode
+                        );
+                        if ($postDetail->isVideo()) {
+                            $postDetail->setVideoUrl($this->getPostDetailsJson()->video_url);
+                            $postDetail->setVideoDuration($this->getPostDetailsJson()->video_duration);
+                            $postDetail->setVideoViewCount($this->getPostDetailsJson()->video_view_count);
+                        }
+                        array_push($postDetails, $postDetail);
+                    }
+                    $this->setPostDetails($postDetails);
+                });
+
                 $post = new Post(
-                    $data->node->edge_media_to_caption->edges[0]->node->text,
-                    $data->node->edge_media_to_comment->count,
-                    $data->node->comments_disabled,
-                    $data->node->edge_liked_by->count,
-                    $data->node->taken_at_timestamp,
-                    $data->node->is_video,
-                    $data->node->display_url
+                    $postData->node->edge_media_to_caption->edges[0]->node->text,
+                    $postData->node->edge_media_to_comment->count,
+                    $postData->node->comments_disabled,
+                    $postData->node->edge_liked_by->count,
+                    $postData->node->taken_at_timestamp,
+                    $this->getPostDetails(),
+                    $this->getPostDetailsJson()->is_ad,
+                    $this->getPostDetailsJson()->has_ranked_comments,
+                    $this->getPostDetailsJson()->caption_is_edited,
+                    $this->getPostDetailsJson()->location->name
                 );
                 array_push($posts, $post);
             }
@@ -176,7 +234,7 @@ class InstaCrawler
     /**
      * @return mixed
      */
-    public function getisPrivate()
+    public function isPrivate()
     {
         return $this->isPrivate;
     }
@@ -192,7 +250,7 @@ class InstaCrawler
     /**
      * @return mixed
      */
-    public function getisBusiness()
+    public function isBusiness()
     {
         return $this->isBusiness;
     }
@@ -203,6 +261,38 @@ class InstaCrawler
     public function setIsBusiness($isBusiness): void
     {
         $this->isBusiness = $isBusiness;
+    }
+
+    /**
+     * @return mixed
+     */
+    public function getPostDetailsJson()
+    {
+        return $this->postDetailsJson;
+    }
+
+    /**
+     * @param mixed $postDetailsJson
+     */
+    public function setPostDetailsJson($postDetailsJson): void
+    {
+        $this->postDetailsJson = $postDetailsJson;
+    }
+
+    /**
+     * @param mixed $postDetails
+     */
+    public function setPostDetails($postDetails): void
+    {
+        $this->postDetails = $postDetails;
+    }
+
+    /**
+     * @return mixed
+     */
+    public function getPostDetails()
+    {
+        return $this->postDetails;
     }
 
 }

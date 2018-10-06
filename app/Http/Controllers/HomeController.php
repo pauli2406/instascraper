@@ -14,8 +14,8 @@ class HomeController extends Controller
     public function home()
     {
         //$instaCrawler = new InstaCrawler('_piroska'); //private account
-        $instaCrawler = new InstaCrawler('annamariasaake'); //private public Account
-        //$instaCrawler = new InstaCrawler('take_tv'); //business account
+        //$instaCrawler = new InstaCrawler('annamariasaake'); //private public Account
+        $instaCrawler = new InstaCrawler('take_tv'); //business account
 
         $instaCrawler->filterBusinessAddress();
         dump($instaCrawler->getBusinessAddress());
