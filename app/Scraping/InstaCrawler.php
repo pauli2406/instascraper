@@ -20,6 +20,7 @@ class InstaCrawler
     private $isBusiness;
     private $postDetailsJson;
     private $postDetails;
+    private $hashtags;
 
     /**
      * Crawler constructor.
@@ -169,6 +170,30 @@ class InstaCrawler
         }
     }
 
+    function filterHashtags(){
+        $this->hashtags = array();
+        $list = array();
+        if (!$this->isPrivate()) {
+            foreach ($this->getPosts() as $post){
+                preg_match_all('/(#[\pL_0-9]+)/', $post->getCaption(), $hashtaglist);
+                foreach ($hashtaglist[0] as $hashtag){
+                    $tag = strtolower($hashtag);
+                    if(in_array($tag, $list)){
+                        foreach ($this->getHashtags() as $object){
+                           if(strcmp($object->getName() , $tag) == 0) {
+                                $object->setCount(($object->getCount()+1));
+                           }
+                        }
+                    } else{
+                        array_push($list,$tag);
+                        $object = new Hashtag($tag,1);
+                        array_push($this->hashtags,$object);
+                    }
+                }
+            }
+        }
+    }
+
     /**
      * @return mixed
      */
@@ -295,6 +320,22 @@ class InstaCrawler
     public function getPostDetails()
     {
         return $this->postDetails;
+    }
+
+    /**
+     * @return mixed
+     */
+    public function getHashtags()
+    {
+        return $this->hashtags;
+    }
+
+    /**
+     * @param mixed $hashtags
+     */
+    public function setHashtags($hashtags): void
+    {
+        $this->hashtags = $hashtags;
     }
 
 }

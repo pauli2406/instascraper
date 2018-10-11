@@ -26,6 +26,9 @@ class HomeController extends Controller
         $instaCrawler->filterPosts();
         dump($instaCrawler->getPosts());
 
+        $instaCrawler->filterHashtags();
+        dump($instaCrawler->getHashtags());
+
         return view('welcome');
     }
 }
